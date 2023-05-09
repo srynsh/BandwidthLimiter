@@ -20,8 +20,7 @@ using namespace std;
 #define SPEED_LIMIT 10000//00 // 1 MBps
 
 map<unsigned long, unsigned long> user_data_total; // cleared every day by a thread
-map<unsigned long, unsigned long> user_data_speed_upload; 
-map<unsigned long, unsigned long> user_data_speed_download;
+map<unsigned long, unsigned long> user_data_speed; 
 
 // one global lock for each map
 mutex tot_data_mutex;
@@ -74,7 +73,6 @@ int callback(struct nfq_q_handle *qh, struct nfgenmsg *nfmsg, struct nfq_data *n
     ph = nfq_get_msg_packet_hdr(nfa);
     if (ph) {
         id = ntohl(ph->packet_id);
-        // std::cout << ph << std::endl;
     } else {
         printf("scam\n");
     }
@@ -94,45 +92,38 @@ int callback(struct nfq_q_handle *qh, struct nfgenmsg *nfmsg, struct nfq_data *n
             return nfq_set_verdict(qh, id, NF_ACCEPT, 0, NULL);
         }
 
-        unsigned long local_ip = sa;
-        map<unsigned long, unsigned long> &current_map = user_data_speed_upload;
-
-        if (check_local(da)){
-            local_ip = da;
-            current_map = user_data_speed_download;
-        }    
-
-        if (check_local(da) && check_local(sa)) { // This is in the LAN not using WAN
-            return nfq_set_verdict(qh, id, NF_ACCEPT, 0, NULL);
-        }
-
         tot_data_mutex.lock();
         speed_mutex.lock();
 
+        unsigned long local_ip = sa;
+
+        if (check_local(da)) local_ip = da;
+
+        if (check_local(da) && check_local(sa)) { // This is in the LAN not using WAN
+            tot_data_mutex.unlock();
+            speed_mutex.unlock();
+            return nfq_set_verdict(qh, id, NF_ACCEPT, 0, NULL);
+        }
+
         // check if the ip addr is of the form 192.168.1.x => user in the router network.
-        if (user_data_total[local_ip] > LIMIT || current_map[local_ip] > SPEED_LIMIT) {
+        if (user_data_total[local_ip] > LIMIT || user_data_speed[local_ip] > SPEED_LIMIT) {
             allow = false;
         } else {
             user_data_total[local_ip] += size_of_packet;
-            current_map[local_ip] += size_of_packet;
+            user_data_speed[local_ip] += size_of_packet;
         }
 
-        printf("current_map[%lx] = %ld\n", local_ip, current_map[local_ip]);
+        printf("user_data_speed[%lx] = %ld\n", local_ip, user_data_speed[local_ip]);
 
         speed_mutex.unlock();
         tot_data_mutex.unlock();
 
         if (ip->protocol == IPPROTO_TCP) {
             tcp = (struct tcphdr *)(payload + (ip->ihl * 4));
-            // printf("")
-            // printf("%lu\n" , ip->saddr);
-
-            // printf("Received TCP packet with source port %d and destination port %d\n", ntohs(tcp->source), ntohs(tcp->dest));
         }
     }
 
     if (allow) {
-        //cout << "allow" << endl;
         return nfq_set_verdict(qh, id, NF_ACCEPT, 0, NULL);
     } else {
         cout << "drop" << endl;
@@ -202,8 +193,7 @@ void clear_map_speed() {
     while(1) {
         usleep(10000);
         speed_mutex.lock();
-        user_data_speed_upload.clear();
-        user_data_speed_download.clear();
+        user_data_speed.clear();
         speed_mutex.unlock();
     }   
 }
