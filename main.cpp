@@ -17,7 +17,7 @@ using namespace std;
 #define NFQUEUE_NUM 0
 #define BUFFER_SIZE 4096
 #define LIMIT 10000000000 // 1 GB/day
-#define SPEED_LIMIT 10000//00 // 1 MBps
+#define SPEED_LIMIT 5000//00 // 1 MBps
 
 map<unsigned long, unsigned long> user_data_total; // cleared every day by a thread
 map<unsigned long, unsigned long> user_data_speed; 
@@ -107,6 +107,8 @@ int callback(struct nfq_q_handle *qh, struct nfgenmsg *nfmsg, struct nfq_data *n
         if (check_local(da)) local_ip = da;
 
         if (check_local(da) && check_local(sa)) { // This is in the LAN not using WAN
+            speed_mutex.unlock();
+            tot_data_mutex.unlock();
             return nfq_set_verdict(qh, id, NF_ACCEPT, 0, NULL);
         }
 
@@ -201,7 +203,7 @@ void clear_map_tot() {
 
 void clear_map_speed() {
     while(1) {
-        usleep(10000);
+        usleep(5000);
         speed_mutex.lock();
         user_data_speed.clear();
         speed_mutex.unlock();
