@@ -16,7 +16,7 @@ using namespace std;
 
 #define NFQUEUE_NUM 0
 #define BUFFER_SIZE 4096
-#define LIMIT 10000000000 // 1 GB/day
+#define LIMIT 1000000000 // 1 GB/day
 #define SPEED_LIMIT 10000//00 // 1 MBps
 
 map<unsigned long, unsigned long> user_data_total; // cleared every day by a thread
@@ -201,11 +201,11 @@ void clear_map_speed() {
 int main() {
     thread t1(packet_main);
     thread t2(clear_map_speed);
-    // thread t3(clear_map_tot);
+    thread t3(clear_map_tot);
 
     t1.join();
     t2.join();
-    // t3.join();
+    t3.join();
 
     return 0;
 }
