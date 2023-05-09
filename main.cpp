@@ -82,8 +82,6 @@ int callback(struct nfq_q_handle *qh, struct nfgenmsg *nfmsg, struct nfq_data *n
     payload_len = nfq_get_payload(nfa, (unsigned char **)&payload);
     if (payload_len > 0) {
         ip = (struct iphdr *)payload;
-        // printf("Received IP packet with source address %s\n", inet_ntoa(*(struct in_addr *)&ip->saddr));
-        // printf("Received IP packet with destination address %s\n", inet_ntoa(*(struct in_addr *)&ip->daddr));
         
         unsigned long sa = ntohl(ip->saddr);
         unsigned long da = ntohl(ip->daddr);
@@ -96,13 +94,6 @@ int callback(struct nfq_q_handle *qh, struct nfgenmsg *nfmsg, struct nfq_data *n
             return nfq_set_verdict(qh, id, NF_ACCEPT, 0, NULL);
         }
 
-        cout << "lock req\n";
-
-        tot_data_mutex.lock();
-        speed_mutex.lock();
-
-        cout << "lock is with me\n";
-
         unsigned long local_ip = sa;
         map<unsigned long, unsigned long> &current_map = user_data_speed_upload;
 
@@ -114,6 +105,9 @@ int callback(struct nfq_q_handle *qh, struct nfgenmsg *nfmsg, struct nfq_data *n
         if (check_local(da) && check_local(sa)) { // This is in the LAN not using WAN
             return nfq_set_verdict(qh, id, NF_ACCEPT, 0, NULL);
         }
+
+        tot_data_mutex.lock();
+        speed_mutex.lock();
 
         // check if the ip addr is of the form 192.168.1.x => user in the router network.
         if (user_data_total[local_ip] > LIMIT || current_map[local_ip] > SPEED_LIMIT) {
