@@ -8,16 +8,23 @@
 #include <linux/netfilter.h>
 #include <arpa/inet.h>
 #include <bits/stdc++.h>
+#include <thread>
+#include <mutex>
+#include <time.h>
 
 using namespace std;
 
 #define NFQUEUE_NUM 0
 #define BUFFER_SIZE 4096
 #define LIMIT 10000000000 // 1 GB/day
-#define SPEED_LIMIT 1000000 // 1 MBps
+#define SPEED_LIMIT 10000//00 // 1 MBps
 
 map<unsigned long, unsigned long> user_data_total; // cleared every day by a thread
-map<unsigned long, unsigned long> user_data_per_10_seconds; // cleared every 10 seconds by a thread
+map<unsigned long, unsigned long> user_data_speed; 
+
+// one global lock for each map
+mutex tot_data_mutex;
+mutex speed_mutex;
 
 bool check_local(string addr) {
     // check if the ip addr is of the form 192.168.1.x => user in the router network.
@@ -88,37 +95,34 @@ int callback(struct nfq_q_handle *qh, struct nfgenmsg *nfmsg, struct nfq_data *n
             return nfq_set_verdict(qh, id, NF_ACCEPT, 0, NULL);
         }
 
-        // check if the ip addr is of the form 192.168.1.x => user in the router network.
-        if (check_local(sa)) {
-            if (user_data_total.find(sa) == user_data_total.end()) {
-                user_data_total[sa] = size_of_packet;
-                printf("new s %lx\n", sa);
-                printf("    d %lx\n", da);
-            } else {
-                user_data_total[sa] += size_of_packet;
-            }
+        cout << "lock req\n";
 
-            if (user_data_total[sa] > LIMIT) {
-                allow = false;
-            }
+        tot_data_mutex.lock();
+        speed_mutex.lock();
 
-            printf("user_data_total[%lx] = %ld\n", sa, user_data_total[sa]);
-        } else if (check_local(da)) {
-            if (user_data_total.find(da) == user_data_total.end()) {
-                user_data_total[da] = size_of_packet;
-                printf("new d %lx\n", da);
-                printf("    s %lx\n", sa);
-            } else {
-                user_data_total[da] += size_of_packet;
-            }
+        cout << "lock is with me\n";
 
-            if (user_data_total[da] > LIMIT) {
-                allow = false;
-            }
+        unsigned long local_ip = sa;
 
-            printf("user_data_total[%lx] = %ld\n", da, user_data_total[da]);
+        if (check_local(da)) local_ip = da;
+
+        if (check_local(da) && check_local(sa)) { // This is in the LAN not using WAN
+            return nfq_set_verdict(qh, id, NF_ACCEPT, 0, NULL);
         }
-        
+
+        // check if the ip addr is of the form 192.168.1.x => user in the router network.
+        if (user_data_total[local_ip] > LIMIT || user_data_speed[local_ip] > SPEED_LIMIT) {
+            allow = false;
+        } else {
+            user_data_total[local_ip] += size_of_packet;
+            user_data_speed[local_ip] += size_of_packet;
+        }
+
+        printf("user_data_speed[%lx] = %ld\n", local_ip, user_data_speed[local_ip]);
+
+        speed_mutex.unlock();
+        tot_data_mutex.unlock();
+
         if (ip->protocol == IPPROTO_TCP) {
             tcp = (struct tcphdr *)(payload + (ip->ihl * 4));
             // printf("")
@@ -137,7 +141,7 @@ int callback(struct nfq_q_handle *qh, struct nfgenmsg *nfmsg, struct nfq_data *n
     }
 }
 
-int main() {
+void packet_main() {
     struct nfq_handle *h;
     struct nfq_q_handle *qh;
     int fd;
@@ -184,7 +188,34 @@ int main() {
 
     nfq_destroy_queue(qh);
     nfq_close(h);
+}
+
+void clear_map_tot() {
+    while (1) {
+        sleep(3600*24);
+        tot_data_mutex.lock();
+        user_data_total.clear();
+        tot_data_mutex.unlock();
+    }
+}
+
+void clear_map_speed() {
+    while(1) {
+        usleep(10000);
+        speed_mutex.lock();
+        user_data_speed.clear();
+        speed_mutex.unlock();
+    }   
+}
+
+int main() {
+    thread t1(packet_main);
+    thread t2(clear_map_speed);
+    // thread t3(clear_map_tot);
+
+    t1.join();
+    t2.join();
+    // t3.join();
 
     return 0;
 }
-
