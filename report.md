@@ -9,6 +9,7 @@ We are going to have multiple VMs running on the same host (all in the same netw
 
 ### Features
 
+- run on physical devices instead of VMs (can use WiFi login system)
 - Set a cap on the amount of data that can be used (eg: 1GB/day per device).
 - Set a maximum bandwidth limit (eg: 30mbps per user).
 - Allow/block traffic from certain ports (eg: 80, 443, 22, etc).
@@ -19,6 +20,5 @@ We are going to have multiple VMs running on the same host (all in the same netw
 ### Future Extensions
 
 - add a login system so that the limit will be per user and not per device
-- run on physical devices instead of VMs (can use WiFi login system)
 - add a user-friendly interface for admins
 - Use logs to generate reports and plots

@@ -17,7 +17,7 @@ using namespace std;
 #define NFQUEUE_NUM 0
 #define BUFFER_SIZE 4096
 #define LIMIT 1000000000 // 1 GB/day
-#define SPEED_LIMIT 10000//00 // 1 MBps
+#define SPEED_LIMIT 100000//00 // 1 MBps
 
 map<unsigned long, unsigned long> user_data_total; // cleared every day by a thread
 map<unsigned long, unsigned long> user_data_speed; 
@@ -25,6 +25,30 @@ map<unsigned long, unsigned long> user_data_speed;
 // one global lock for each map
 mutex tot_data_mutex;
 mutex speed_mutex;
+
+bool is_block(unsigned long ip) {
+    // open the file and check if the ip is in the file
+    FILE *fp = fopen(".block", "r");
+    if (fp == NULL) {
+        return 0;
+    }
+
+    char line[16];
+
+    while (fgets(line, 16, fp) != NULL) {
+        unsigned long perm_ip = ntohl(inet_addr(line));
+        // cout << perm_ip << " " << ip << endl;
+        if (perm_ip == ip) {
+            cout << "-----------------------------------------------------------\n";
+            cout << perm_ip << " " << ip << endl;
+            cout << "-----------------------------------------------------------\n";
+            fclose(fp);
+            return 1;
+        }
+    }
+
+    return 0;
+}
 
 bool check_local(string addr) {
     // check if the ip addr is of the form 192.168.1.x => user in the router network.
@@ -37,6 +61,8 @@ bool check_local(string addr) {
 
 bool check_local(unsigned long ip) {
     // c0.a8.01 => 192.168.1
+    // 10.42.0.x => 0a.2a.00.
+    // return (ip & 0xffffff00) == 0x0a2a0000;
     return (ip & 0xffffff00) == 0xc0a80100;
 }
 
@@ -75,6 +101,7 @@ int callback(struct nfq_q_handle *qh, struct nfgenmsg *nfmsg, struct nfq_data *n
     }
 
     payload_len = nfq_get_payload(nfa, (unsigned char **)&payload);
+
     if (payload_len > 0) {
         ip = (struct iphdr *)payload;
         
@@ -87,6 +114,10 @@ int callback(struct nfq_q_handle *qh, struct nfgenmsg *nfmsg, struct nfq_data *n
 
         if (!check_valid(sa) || !check_valid(da)) {
             return nfq_set_verdict(qh, id, NF_ACCEPT, 0, NULL);
+        }
+
+        if (is_block(sa) || is_block(da)) {
+            return nfq_set_verdict(qh, id, NF_DROP, 0, NULL);
         }
 
         tot_data_mutex.lock();
@@ -110,14 +141,23 @@ int callback(struct nfq_q_handle *qh, struct nfgenmsg *nfmsg, struct nfq_data *n
             user_data_speed[local_ip] += size_of_packet;
         }
 
-        printf("user_data_speed[%lx] = %ld\n", local_ip, user_data_speed[local_ip]);
+        // printf("user_data_speed[%lx] = %ld\n", local_ip, user_data_speed[local_ip]);
 
         speed_mutex.unlock();
         tot_data_mutex.unlock();
 
-        if (ip->protocol == IPPROTO_TCP) {
-            tcp = (struct tcphdr *)(payload + (ip->ihl * 4));
-        }
+
+        // cout << ip->frag_off << " " << ip->ihl << " " << ip->tos << " " << ip->version << " " << sa << " " << da <<endl;
+        // if (ip->protocol == IPPROTO_TCP) {
+        //     cout << "tcp" << endl;
+        //     tcp = (struct tcphdr *)(payload + (ip->ihl * 4));
+        // } else if (ip->protocol == IPPROTO_UDP) {
+        //     cout << "udp" << endl;
+        // } else if (ip->protocol == IPPROTO_ICMP) {
+        //     cout << "icmp" << endl;
+        // } else {
+        //     cout << "other" << endl;
+        // }
     }
 
     if (allow) {
@@ -188,7 +228,7 @@ void clear_map_tot() {
 
 void clear_map_speed() {
     while(1) {
-        usleep(10000);
+        usleep(100000);
         speed_mutex.lock();
         user_data_speed.clear();
         speed_mutex.unlock();
