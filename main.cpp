@@ -42,19 +42,16 @@ bool check_local(unsigned long ip) {
 
 bool check_valid(unsigned long ip) {
     if ((ip & 0xff000000) == 0) {
-        return false; // 0.0.0.0/24
+        return false; // 0.0.0.0/8 (reserved)
     }
-    if (ip == 0xc0a801ff) {
-        return false; // local bc
-    }
-    if ((ip & 0xff000000) == 0xff000000) {
-        return false;
+    if ((ip & 0xff) == 0xff) {
+        return false; // x.x.x.255 (broadcast)
     }
     if ((ip & 0xffff0000) == 0xfea90000) {
-        return false;
+        return false; // 254.169.0.0/16 (link local)
     }
     if ((ip & 0xe0000000) == 0xe0000000) {
-        return false; // 223.0.0.0/4
+        return false; // 224.0.0.0/3 (multicast + reserved)
     }
 
     return true;
