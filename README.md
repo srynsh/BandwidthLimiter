@@ -34,7 +34,8 @@ This command flushes all the iptables rules.
 ## Working
 
 The code has 3 threads:
--- This main thread which is responsible for taking the input from the user and then making the descision to drop or accept the packet.
--- This thread clears the map that is used to maintain the bandwidth usage of each IP address.
--- This thread clears the map that is used to maintain the total data usage of each IP address.
+
+- This main thread which is responsible for taking the input from the user and then making the descision to drop or accept the packet.
+- This thread clears the map that is used to maintain the bandwidth usage of each IP address.
+- This thread clears the map that is used to maintain the total data usage of each IP address.
 
