@@ -1,3 +1,4 @@
+#include <cstdint>
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
@@ -26,29 +27,54 @@ map<unsigned long, unsigned long> user_data_speed;
 mutex tot_data_mutex;
 mutex speed_mutex;
 
-bool is_block(unsigned long ip) {
-    // open the file and check if the ip is in the file
-    FILE *fp = fopen(".block", "r");
-    if (fp == NULL) {
-        return 0;
-    }
+set<unsigned short> blacklisted_tcp;
+set<unsigned short> blacklisted_udp;
+set<unsigned long> blacklisted_ip;
 
+void load_blacklist_files() {
+    FILE *fp_ip = fopen(".ip", "r");
+    FILE *fp_tcp  = fopen(".tcp_port", "r");
+    FILE *fp_udp = fopen(".udp_port", "r");
     char line[16];
 
-    while (fgets(line, 16, fp) != NULL) {
-        unsigned long perm_ip = ntohl(inet_addr(line));
-        // cout << perm_ip << " " << ip << endl;
-        if (perm_ip == ip) {
-            cout << "-----------------------------------------------------------\n";
-            cout << perm_ip << " " << ip << endl;
-            cout << "-----------------------------------------------------------\n";
-            fclose(fp);
-            return 1;
-        }
+    while (fgets(line, 16, fp_ip) != NULL) {
+        unsigned long blocked_ip = ntohl(inet_addr(line));
+        blacklisted_ip.insert(blocked_ip);
     }
 
-    return 0;
+    unsigned short port_num;
+    while (fscanf(fp_tcp, "%hu", &port_num) == 1) {
+        blacklisted_tcp.insert(port_num);
+    }
+
+    while (fscanf(fp_udp, "%hu", &port_num) == 1) {
+        blacklisted_udp.insert(port_num);
+    }
 }
+
+// bool is_block(unsigned long ip) {
+//     // open the file and check if the ip is in the file
+//     FILE *fp = fopen(".block", "r");
+//     if (fp == NULL) {
+//         return 0;
+//     }
+
+//     char line[16];
+
+//     while (fgets(line, 16, fp) != NULL) {
+//         unsigned long perm_ip = ntohl(inet_addr(line));
+//         // cout << perm_ip << " " << ip << endl;
+//         if (perm_ip == ip) {
+//             cout << "-----------------------------------------------------------\n";
+//             cout << perm_ip << " " << ip << endl;
+//             cout << "-----------------------------------------------------------\n";
+//             fclose(fp);
+//             return 1;
+//         }
+//     }
+
+//     return 0;
+// }
 
 bool check_local(string addr) {
     // check if the ip addr is of the form 192.168.1.x => user in the router network.
@@ -83,6 +109,29 @@ bool check_valid(unsigned long ip) {
     return true;
 }
 
+// bool is_port_blocked(int port) {
+//     // open the file and check if the ip is in the file
+    
+//     if (fp == NULL) {
+//         return 0;
+//     }
+
+//     char line[16];
+
+//     while (fgets(line, 16, fp) != NULL) {
+//         unsigned long perm_ip = ntohl(inet_addr(line));
+//         // cout << perm_ip << " " << ip << endl;
+//         if (perm_ip == ip) {
+//             cout << "-----------------------------------------------------------\n";
+//             cout << perm_ip << " " << ip << endl;
+//             cout << "-----------------------------------------------------------\n";
+//             fclose(fp);
+//             return 1;
+//         }
+//     }
+
+//     return 0;
+// }
 
 int callback(struct nfq_q_handle *qh, struct nfgenmsg *nfmsg, struct nfq_data *nfa, void *data) {
     struct nfqnl_msg_packet_hdr *ph;
@@ -116,16 +165,20 @@ int callback(struct nfq_q_handle *qh, struct nfgenmsg *nfmsg, struct nfq_data *n
             return nfq_set_verdict(qh, id, NF_ACCEPT, 0, NULL);
         }
 
-        if (is_block(sa) || is_block(da)) {
-            return nfq_set_verdict(qh, id, NF_DROP, 0, NULL);
-        }
+        // if (is_block(sa) || is_block(da)) {
+        //     return nfq_set_verdict(qh, id, NF_DROP, 0, NULL);
+        // }
 
         tot_data_mutex.lock();
         speed_mutex.lock();
 
         unsigned long local_ip = sa;
+        bool is_source_local = 1;
 
-        if (check_local(da)) local_ip = da;
+        if (check_local(da)) {
+            local_ip = da;
+            is_source_local = 0;
+        }
 
         if (check_local(da) && check_local(sa)) { // This is in the LAN not using WAN
             tot_data_mutex.unlock();
@@ -146,18 +199,18 @@ int callback(struct nfq_q_handle *qh, struct nfgenmsg *nfmsg, struct nfq_data *n
         speed_mutex.unlock();
         tot_data_mutex.unlock();
 
+        if (ip->protocol == IPPROTO_TCP) {
+            cout << "tcp" << endl;
+            tcp = (struct tcphdr *)(payload + (ip->ihl * 4));
+            cout << ntohs(tcp->th_sport) << " " << ntohs(tcp->th_dport) << endl;
+            printf("%08x %08x\n", sa, da);
 
-        // cout << ip->frag_off << " " << ip->ihl << " " << ip->tos << " " << ip->version << " " << sa << " " << da <<endl;
-        // if (ip->protocol == IPPROTO_TCP) {
-        //     cout << "tcp" << endl;
-        //     tcp = (struct tcphdr *)(payload + (ip->ihl * 4));
-        // } else if (ip->protocol == IPPROTO_UDP) {
-        //     cout << "udp" << endl;
-        // } else if (ip->protocol == IPPROTO_ICMP) {
-        //     cout << "icmp" << endl;
-        // } else {
-        //     cout << "other" << endl;
-        // }
+            int block_port = ntohs(is_source_local ? tcp->th_dport : tcp->th_sport);
+
+            // if (is_port_blocked(block_port)) {
+            //     allow = 0;
+            // }
+        }
     }
 
     if (allow) {
@@ -236,6 +289,8 @@ void clear_map_speed() {
 }
 
 int main() {
+
+
     thread t1(packet_main);
     thread t2(clear_map_speed);
     thread t3(clear_map_tot);
