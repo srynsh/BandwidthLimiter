@@ -1,25 +1,33 @@
-#include <cstdint>
+// C stdlib
 #include <stdio.h>
-#include <stdlib.h>
 #include <unistd.h>
-#include <netinet/in.h>
+
+// networking stuff
 #include <netinet/ip.h>
 #include <netinet/tcp.h>
 #include <netinet/udp.h>
 #include <libnetfilter_queue/libnetfilter_queue.h>
 #include <linux/netfilter.h>
 #include <arpa/inet.h>
-#include <bits/stdc++.h>
+
+// C++ stdlib
+#include <map>
+#include <set>
 #include <thread>
 #include <mutex>
-#include <time.h>
+#include <iostream>
 
 using namespace std;
 
 #define NFQUEUE_NUM 0
 #define BUFFER_SIZE 4096
-#define LIMIT 1000000000 // 1 GB/day
-#define SPEED_LIMIT 100000//00 // 1 MBps
+#define DATA_LIMIT 1000000000 // 1 GB
+#define DATA_RESET_INTERVAL 86400 // in seconds
+
+#define SPEED_LIMIT 1000  // limit in KBps
+#define SPEED_RESET_INTERVAL 100000 // in microseconds
+
+#define BYTES_PER_INTERVAL ((SPEED_LIMIT * SPEED_RESET_INTERVAL) / 1000000)
 
 map<unsigned long, unsigned long> user_data_total; // cleared every day by a thread
 map<unsigned long, unsigned long> user_data_speed; 
@@ -136,7 +144,7 @@ int callback(struct nfq_q_handle *qh, struct nfgenmsg *nfmsg, struct nfq_data *n
         speed_mutex.lock();
 
         // check if the ip addr is of the form 192.168.1.x => user in the router network.
-        if (user_data_total[local_ip] > LIMIT || user_data_speed[local_ip] > SPEED_LIMIT) {
+        if (user_data_total[local_ip] > DATA_LIMIT || user_data_speed[local_ip] > BYTES_PER_INTERVAL) {
             allow = false;
         } else {
             long size_of_packet = ntohs(ip->tot_len);
@@ -231,7 +239,7 @@ void packet_main() {
 
 void clear_map_tot() {
     while (1) {
-        sleep(3600*24);
+        sleep(DATA_RESET_INTERVAL);
         tot_data_mutex.lock();
         user_data_total.clear();
         tot_data_mutex.unlock();
@@ -240,7 +248,7 @@ void clear_map_tot() {
 
 void clear_map_speed() {
     while(1) {
-        usleep(100000);
+        usleep(SPEED_RESET_INTERVAL);
         speed_mutex.lock();
         user_data_speed.clear();
         speed_mutex.unlock();

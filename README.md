@@ -1,10 +1,10 @@
 # README
 
-## Installation
+## Prerequisites
 
-For RedHat/Fedora/CentOS
+For Fedora (and probably RHEL/CentOS)
 ```bash
-sudo dnf install iptables-devel libnfnetlink-devel libnetfilter_acct.x86_64 libnetfilter_queue-devel.x86_64
+sudo dnf install iptables-devel libnfnetlink-devel libnetfilter_acct libnetfilter_queue-devel
 ```
 
 This will give you all the necessary libraries to compile the code. 
