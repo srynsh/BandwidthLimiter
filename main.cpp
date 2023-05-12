@@ -41,9 +41,9 @@ set<unsigned short> blacklisted_udp;
 set<unsigned long> blacklisted_ip;
 
 void load_blacklist_files() {
-    FILE *fp_ip = fopen("ip_blacklist.txt", "r");
-    FILE *fp_tcp  = fopen("tcp_blacklist.txt", "r");
-    FILE *fp_udp = fopen("udp_blacklist.txt", "r");
+    FILE *fp_ip = fopen("./blacklisted/ip_blacklist.txt", "r");
+    FILE *fp_tcp  = fopen("./blacklisted/tcp_blacklist.txt", "r");
+    FILE *fp_udp = fopen("./blacklisted/udp_blacklist.txt", "r");
     char line[16];
 
     while (fgets(line, 16, fp_ip) != NULL) {
