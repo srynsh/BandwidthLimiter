@@ -27,7 +27,7 @@ using namespace std;
 #define SPEED_LIMIT 1000  // limit in KBps
 #define SPEED_RESET_INTERVAL 100000 // in microseconds
 
-#define BYTES_PER_INTERVAL ((SPEED_LIMIT * SPEED_RESET_INTERVAL) / 1000000)
+#define BYTES_PER_INTERVAL ((SPEED_LIMIT * SPEED_RESET_INTERVAL) / 1000)
 
 map<unsigned long, unsigned long> user_data_total; // cleared every day by a thread
 map<unsigned long, unsigned long> user_data_speed; 
@@ -62,6 +62,8 @@ void load_blacklist_files() {
         printf("udp port = %hu\n", port_num);
         blacklisted_udp.insert(port_num);
     }
+
+    cout << BYTES_PER_INTERVAL << endl;
 }
 
 bool check_local(unsigned long ip) {
